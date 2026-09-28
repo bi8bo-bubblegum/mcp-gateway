@@ -33,6 +33,14 @@ class Settings(BaseSettings):
     upstream_timeout: float = 30.0
     discovery_timeout: float = 15.0
 
+    # 每个上游服务保持的长连接数
+    upstream_pool_size: int = 4
+    # 池中连接空闲超过这个秒数就丢弃重连：长连接可能已被上游单方面断开，
+    # 复用只会让"长时间空闲后的第一个请求"莫名失败
+    upstream_pool_slot_max_idle: float = 60.0
+    # 整个连接池（服务被删或凭证改过之后留下的旧池）全空闲多久后回收
+    upstream_pool_idle_ttl: float = 300.0
+
 @lru_cache
 def get_settings() -> Settings:
     return Settings()

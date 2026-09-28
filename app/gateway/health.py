@@ -71,6 +71,17 @@ class HealthMonitor:
         self._revisions.invalidate()
         self._registry.invalidate()
 
+        # 顺手回收长时间全空闲的上游连接池：服务被删、或 URL/凭证改过之后，
+        # 旧 key 对应的池不会再有请求进来，只能靠这里清理。
+        try:
+            await self._registry.pool.reap(
+                max_idle_seconds=self._settings.upstream_pool_idle_ttl
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("上游连接池回收失败")
+
 class BackgroundLoops:
     def __init__(self, *, registry: RuntimeRegistry, revisions: RevisionStore, manager: ServiceManager, settings: Settings) -> None:
         self._watcher = RevisionWatcher(registry=registry, revisions=revisions, settings=settings)

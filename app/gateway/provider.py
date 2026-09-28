@@ -28,6 +28,6 @@ class GatewayProvider(Provider):
         return GatewayTool(
             descriptor=descriptor,
             service=service,
-            factory=self._registry.factory,
+            pool=self._registry.pool,
             timeout=self._registry.upstream_timeout,
         )

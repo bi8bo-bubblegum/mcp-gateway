@@ -1,3 +1,5 @@
+import logging
+
 from collections.abc import Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
@@ -8,7 +10,15 @@ from app.core.security import SecretBox
 from app.db.models import Service, Tool
 from app.services.policy import ToolDescriptor
 from app.services.revision import RevisionStore
-from app.services.upstream import StreamableHttpClientFactory, UpstreamAuth, UpstreamClientFactory
+from app.services.upstream import (
+    StreamableHttpClientFactory,
+    UpstreamAuth,
+    UpstreamClientFactory,
+    UpstreamClientPool,
+    decrypt_auth,
+)
+
+logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class RuntimeService:
@@ -36,11 +46,17 @@ class RuntimeRegistry:
         self._revisions = revisions
         self._secret_box = secret_box
         self._factory = factory or StreamableHttpClientFactory()
+        self._pool = UpstreamClientPool(
+            self._factory,
+            size=settings.upstream_pool_size,
+            max_slot_idle=settings.upstream_pool_slot_max_idle,
+        )
         self._snapshot: RuntimeSnapshot | None = None
 
     @property
-    def factory(self) -> UpstreamClientFactory:
-        return self._factory
+    def pool(self) -> UpstreamClientPool:
+        """工具调用复用长连接的入口。"""
+        return self._pool
 
     @property
     def upstream_timeout(self) -> float:
@@ -84,20 +100,28 @@ class RuntimeRegistry:
 
             services: dict[int, RuntimeService] = {}
             for row in service_rows:
+                try:
+                    auth = decrypt_auth(self._secret_box, row.auth_ciphertext)
+                except Exception:
+                    logger.exception("service %s 的上游凭证无法解密，跳过该服务", row.slug)
+                    continue
                 services[row.id] = RuntimeService(
                     id=row.id,
                     slug=row.slug,
                     name=row.slug,
                     url=row.url,
-                    auth=self._decrypt_auth(row.auth_ciphertext),
+                    auth=auth,
                 )
 
             descriptors: dict[str, ToolDescriptor] = {}
             for row in tool_rows:
+                service = services.get(row.service_id)
+                if service is None:
+                    continue
                 descriptors[row.effective_name] = ToolDescriptor(
                     id=row.id,
                     service_id=row.service_id,
-                    service_slug=services[row.service_id].slug,
+                    service_slug=service.slug,
                     upstream_name=row.upstream_name,
                     effective_name=row.effective_name,
                     description=row.description,
@@ -113,10 +137,5 @@ class RuntimeRegistry:
             descriptors=MappingProxyType(descriptors),
         )
         return self._snapshot
-
-    def _decrypt_auth(self, ciphertext: str | None) -> UpstreamAuth:
-        if not ciphertext:
-            return  UpstreamAuth()
-        return UpstreamAuth.from_payload(self._secret_box.decrypt(ciphertext))
 
 

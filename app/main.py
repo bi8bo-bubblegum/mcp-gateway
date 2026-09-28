@@ -133,6 +133,8 @@ def build_app(container: Container | None = None) -> FastAPI:
             yield
         finally:
             await container.background.stop()
+            # 关闭所有上游长连接，否则优雅退出会挂在这里等它们超时
+            await container.registry.pool.aclose()
             await dispose_engine()
 
     app = FastAPI(

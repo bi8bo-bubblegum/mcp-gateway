@@ -55,21 +55,30 @@ class HealthMonitor:
             service_ids = await self._manager.list_enabled_service_ids(session)
 
         semaphore = asyncio.Semaphore(self._settings.health_max_concurrency)
+        changed = False
 
         async def probe(service_id: int) -> None:
+            nonlocal changed
             async with semaphore:
                 try:
-                    await self._manager.check_health(service_id)
+                    result = await self._manager.check_health(service_id)
                 except asyncio.CancelledError:
                     raise
                 except Exception:
                     logger.exception("health check raised for service %s", service_id)
+                    return
+                if result.changed:
+                    changed = True
 
         if service_ids:
             await asyncio.gather(*(probe(sid) for sid in service_ids))
 
-        self._revisions.invalidate()
-        self._registry.invalidate()
+        # 只在真的有服务进出运行时快照时本地失效缓存。以前这里无条件失效，
+        # 于是每个 sweep 都会把本进程的策略缓存和运行时快照全部丢掉重建，
+        # 健康检查间隔多短、缓存就等于多短。跨进程的失效由 revision 广播负责。
+        if changed:
+            self._revisions.invalidate()
+            self._registry.invalidate()
 
         # 顺手回收长时间全空闲的上游连接池：服务被删、或 URL/凭证改过之后，
         # 旧 key 对应的池不会再有请求进来，只能靠这里清理。

@@ -36,6 +36,19 @@ class RefreshResult:
     removed: int
 
 
+@dataclass(frozen=True)
+class HealthResult:
+    """一次健康探测的结果。
+
+    `changed` 表示 service.health 是否真的变了。只有它才需要提升 revision：
+    last_checked_at / last_error / consecutive_failures 都不参与运行时快照，
+    每次都提升 revision 会让所有 worker 的 token 策略缓存和快照一起失效。
+    """
+
+    reachable: bool
+    changed: bool
+
+
 class ServiceManager:
     def __init__(
         self,
@@ -241,7 +254,7 @@ class ServiceManager:
             removed=removed,
         )
 
-    async def check_health(self, service_id: int) -> bool:
+    async def check_health(self, service_id: int) -> HealthResult:
         from app.db.session import session_scope
 
         async with session_scope() as session:
@@ -263,11 +276,13 @@ class ServiceManager:
             error = f"{type(exc).__name__}: {exc}"
 
         recovered = False
+        changed = False
         async with session_scope() as session:
             service = await self.get_service(session, service_id)
+            previous = service.health
             service.last_checked_at = utcnow()
             if error is None:
-                recovered = service.health != "healthy"
+                recovered = previous != "healthy"
                 service.health = "healthy"
                 service.consecutive_failures = 0
                 service.last_error = None
@@ -279,13 +294,17 @@ class ServiceManager:
                     >= self._settings.health_failure_threshold
                 ):
                     service.health = "unhealthy"
-            await bump_revision(session)
+            changed = service.health != previous
+            if changed:
+                # 只有能进/出运行时快照的字段变了才广播；否则每个 sweep 都会
+                # 无谓地清空所有 worker 的 token 策略缓存和运行时快照。
+                await bump_revision(session)
 
         if recovered:
             # A recovered server may have changed its catalog while it was down.
             await self.refresh_tools(service_id)
 
-        return error is None
+        return HealthResult(reachable=error is None, changed=changed)
 
     async def list_enabled_service_ids(self, session: AsyncSession) -> list[int]:
         result = await session.execute(
@@ -300,11 +319,14 @@ class ServiceManager:
 
         async with session_scope() as session:
             service = await self.get_service(session, service_id)
+            changed = service.health != "unhealthy"
             service.health = "unhealthy"
             service.consecutive_failures += 1
             service.last_error = f"{type(error).__name__}: {error}"[:MAX_ERROR_LENGTH]
             service.last_checked_at = utcnow()
-            await bump_revision(session)
+            if changed:
+                # 同上：已经是不健康状态时重复提升 revision 只是无谓的缓存抖动
+                await bump_revision(session)
 
     def _encrypt_auth(self, auth: object | None) -> str | None:
         if auth is None:

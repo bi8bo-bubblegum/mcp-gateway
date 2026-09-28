@@ -1,3 +1,4 @@
+import time
 from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
 from typing import Any
@@ -19,8 +20,18 @@ class AuditWriteError(Exception):
 
 
 class AuditService:
-    def __init__(self, *, hasher: TokenHasher) -> None:
+    def __init__(self, *, hasher: TokenHasher, touch_interval: float = 60.0) -> None:
         self._hasher = hasher
+        self._touch_interval = touch_interval
+        self._touched_at = dict[int, float] = {}
+
+    def _should_touch(self, token_id: int) -> bool:
+        now = time.monotonic()
+        last = self._touched_at.get(token_id)
+        if last is not None and now - last < self._touch_interval:
+            return False
+        self._touched_at[token_id] = now
+        return True
 
     def _hash_arguments(self, arguments: Mapping[str, Any] | None) -> dict[str, str]:
         return {
@@ -57,7 +68,7 @@ class AuditService:
                     started_at=utcnow(),
                 )
                 session.add(event)
-                if token is not None:
+                if token is not None and self._should_touch(token.id):
                     await session.execute(
                         update(Token)
                         .where(Token.id == token.id)

@@ -30,6 +30,12 @@ class Settings(BaseSettings):
         "mysql+aiomysql://root:root@127.0.0.1:3306/mcp_gateway?charset=utf8mb4"
     )
     db_echo: bool = False
+    # 数据库连接池。每个工具调用在关键路径上写两次审计，池子偏小会直接
+    # 变成 AuditWriteError -> 拒绝调用，所以不能沿用 SQLAlchemy 的 5+10 默认值。
+    db_pool_size: int = 20
+    db_max_overflow: int = 20
+    db_pool_timeout: float = 10.0
+    db_pool_recycle: int = 1800
 
     host: str = "127.0.0.1"
     port: int = 8800

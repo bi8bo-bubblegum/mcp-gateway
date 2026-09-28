@@ -124,7 +124,14 @@ def build_app(container: Container | None = None) -> FastAPI:
     @asynccontextmanager
     async def gateway_lifespan(app: FastAPI):
         configure_logging()
-        init_engine(container.settings.database_url, echo=container.settings.db_echo)
+        init_engine(
+            container.settings.database_url,
+            echo=container.settings.db_echo,
+            pool_size=container.settings.db_pool_size,
+            max_overflow=container.settings.db_max_overflow,
+            pool_timeout=container.settings.db_pool_timeout,
+            pool_recycle=container.settings.db_pool_recycle,
+        )
         async with session_scope() as session:
             await ensure_revision_row(session)
         app.state.container = container

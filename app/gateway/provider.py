@@ -16,7 +16,7 @@ class GatewayProvider(Provider):
         snapshot = await self._registry.snapshot()
         return [self._build(snapshot, item) for item in snapshot.all_descriptors()]
 
-    async def _get_tools(self, name: str, version=None) -> Tool | None:
+    async def _get_tool(self, name: str, version=None) -> Tool | None:
         snapshot = await self._registry.snapshot()
         descriptor = snapshot.descriptor(name)
         if descriptor is None:

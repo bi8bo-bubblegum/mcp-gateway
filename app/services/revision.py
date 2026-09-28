@@ -13,11 +13,17 @@ async def ensure_revision_row(session: AsyncSession) -> None:
     existing = await session.get(GatewayRevision, REVISION_ROW_ID)
     if existing is not None:
         return
-    session.add(GatewayRevision(id=REVISION_ROW_ID, revision=0))
+    # 用 SAVEPOINT 而不是 session.rollback()：这里回滚的是整个调用方事务，
+    # 会把同一次 admin 流程里刚写入的 token、策略、审计一起丢掉，调用方却
+    # 以为提交成功了。多进程同时启动时这条 INSERT 必然撞唯一键，所以必须
+    # 把失败范围限制在这一条语句内。
     try:
-        await session.flush()
+        async with session.begin_nested():
+            session.add(GatewayRevision(id=REVISION_ROW_ID, revision=0))
+            await session.flush()
     except IntegrityError:
-        await session.rollback()
+        # 其他进程已经建好了，继续用那一行
+        pass
 
 async def bump_revision(session: AsyncSession) -> int:
     await ensure_revision_row(session)

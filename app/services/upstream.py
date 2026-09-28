@@ -5,7 +5,6 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 from fastmcp.client import Client
 from fastmcp.client.transports import StreamableHttpTransport
-from fastmcp.server.auth import auth
 from fastmcp.tools import ToolResult
 
 TOOL_NAME_SEPARATOR = "__"
@@ -52,7 +51,7 @@ class UpstreamClientFactory(Protocol):
     def build(self, *, url: str, auth: UpstreamAuth, timeout: float) -> Client[Any]:
         ...
 
-class StreamableHttpClentFactory:
+class StreamableHttpClientFactory:
     def build(self, *, url: str, auth: UpstreamAuth, timeout: float) -> Client[Any]:
         transport = StreamableHttpTransport(
             url=url,

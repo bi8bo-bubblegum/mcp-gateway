@@ -90,13 +90,16 @@ class ServiceManager:
         # Discovery runs outside the transaction: a slow upstream must not hold
         # a database transaction open.
         await self.refresh_tools(service_id)
+        # refresh_tools 走的是独立 session，本 session 内存里仍是发现之前的旧值，
+        # 必须先过期，否则下面读到的 health 永远停留在 "unknown"。
+        session.expire_all()
         if payload.enabled:
             # Auto-enable is only honored once discovery actually succeeded.
             fresh = await self.get_service(session, service_id)
             if fresh.health == "healthy":
                 await self.set_enabled(session, service_id, True)
 
-        await session.expire_all()
+        session.expire_all()
         return await self.get_service(session, service_id)
 
     async def update_service(
@@ -119,11 +122,13 @@ class ServiceManager:
 
         if reconnect_required:
             await self.refresh_tools(service_id)
+            # 同上：丢弃本 session 的陈旧状态，否则 set_enabled 会拿到旧 health。
+            session.expire_all()
 
         if payload.enabled is not None:
             await self.set_enabled(session, service_id, payload.enabled)
 
-        await session.expire_all()
+        session.expire_all()
         return await self.get_service(session, service_id)
 
     async def set_enabled(

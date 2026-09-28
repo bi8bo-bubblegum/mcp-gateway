@@ -8,7 +8,7 @@ from app.core.security import SecretBox
 from app.db.models import Service, Tool
 from app.services.policy import ToolDescriptor
 from app.services.revision import RevisionStore
-from app.services.upstream import StreamableHttpClentFactory, UpstreamAuth, UpstreamClientFactory
+from app.services.upstream import StreamableHttpClientFactory, UpstreamAuth, UpstreamClientFactory
 
 @dataclass(frozen=True)
 class RuntimeService:
@@ -35,7 +35,7 @@ class RuntimeRegistry:
         self._settings = settings
         self._revisions = revisions
         self._secret_box = secret_box
-        self._factory = factory or StreamableHttpClentFactory()
+        self._factory = factory or StreamableHttpClientFactory()
         self._snapshot: RuntimeSnapshot | None = None
 
     @property

@@ -16,6 +16,9 @@ from app.core.security import SecretBox
 logger = logging.getLogger(__name__)
 
 TOOL_NAME_SEPARATOR = "__"
+# 与 app/db/models.py 中 tools.upstream_name / tools.effective_name 的列宽一致
+MAX_UPSTREAM_NAME_LENGTH = 128
+MAX_EFFECTIVE_NAME_LENGTH = 256
 DEFAULT_POOL_SIZE = 4
 # 池满时等待归还的重判间隔：等这么久还没等到，就回循环顶部重新判断
 # 是否该新建连接（否则"长时间空闲后来一批并发"会退化成单连接串行）。
@@ -23,6 +26,26 @@ POOL_WAIT_RECHECK_SECONDS = 0.5
 
 def effective_tool_name(service_slug: str, upstream_name: str) -> str:
     return f"{service_slug}{TOOL_NAME_SEPARATOR}{upstream_name}"
+
+def tool_name_problem(service_slug: str, upstream_name: str) -> str | None:
+    """检查上游工具名能不能安全落库，返回拒绝原因；None 表示可用。
+
+    上游是别人的服务，工具名的长度和内容都不受我们控制，而它会直接写进
+    tools.effective_name（唯一索引 + String(256)）和 tools.upstream_name
+    （String(128)）。不校验的话，一个超长名字就能让整次刷新的写入事务在
+    MySQL 严格模式下报 1406 而整体失败；名字里带分隔符则会让
+    split_effective_name 解析出错误的服务。
+    """
+    if not upstream_name:
+        return "工具名为空"
+    if TOOL_NAME_SEPARATOR in upstream_name:
+        return f"工具名包含保留分隔符 {TOOL_NAME_SEPARATOR!r}"
+    if len(upstream_name) > MAX_UPSTREAM_NAME_LENGTH:
+        return f"工具名 {len(upstream_name)} 字符，超过 {MAX_UPSTREAM_NAME_LENGTH} 上限"
+    combined = len(service_slug) + len(TOOL_NAME_SEPARATOR) + len(upstream_name)
+    if combined > MAX_EFFECTIVE_NAME_LENGTH:
+        return f"加上服务前缀后 {combined} 字符，超过 {MAX_EFFECTIVE_NAME_LENGTH} 上限"
+    return None
 
 def split_effective_name(name: str) -> tuple[str, str] | None:
     slug, separator, upstream = name.partition(TOOL_NAME_SEPARATOR)

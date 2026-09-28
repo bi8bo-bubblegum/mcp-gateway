@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
@@ -15,11 +16,15 @@ from app.services.revision import bump_revision
 from app.services.upstream import (
     UpstreamAuth,
     UpstreamClientFactory,
+    UpstreamToolSpec,
     discover_tools,
     effective_tool_name,
+    tool_name_problem,
 )
 
 MAX_ERROR_LENGTH = 2000
+
+logger = logging.getLogger(__name__)
 
 
 class ServiceManagerError(Exception):
@@ -191,6 +196,29 @@ class ServiceManager:
         except Exception as error:  # noqa: BLE001 - reported to admin, not swallowed
             await self._record_refresh_failure(service_id, error)
             return RefreshResult(service_id, 0, 0, 0, 0)
+
+        # 上游有自己的想法：工具名可能超长、可能带保留分隔符、可能重名。
+        # 这些名字一旦原样落库就是唯一索引冲突或 1406 超长错误，整次刷新
+        # 连带已发现的其他工具一起失败。这里逐个筛掉，只跳过有问题的那个。
+        accepted: list[UpstreamToolSpec] = []
+        seen_names: set[str] = set()
+        for spec in specs:
+            problem = tool_name_problem(slug, spec.name)
+            if problem is not None:
+                logger.warning(
+                    "service %s: 跳过上游工具 %r（%s）", slug, spec.name, problem
+                )
+                continue
+            if spec.name in seen_names:
+                logger.warning(
+                    "service %s: 上游返回了重复的工具名 %r，只保留第一个",
+                    slug,
+                    spec.name,
+                )
+                continue
+            seen_names.add(spec.name)
+            accepted.append(spec)
+        specs = accepted
 
         async with session_scope() as session:
             service = await self.get_service(session, service_id)

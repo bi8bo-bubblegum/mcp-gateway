@@ -289,9 +289,7 @@ class ServiceManager:
 
     async def list_enabled_service_ids(self, session: AsyncSession) -> list[int]:
         result = await session.execute(
-            select(Service.id).where(
-                Service.enabled.is_(True), Service.health == "healthy"
-            )
+            select(Service.id).where(Service.enabled.is_(True))
         )
         return [int(row) for row in result.scalars()]
 

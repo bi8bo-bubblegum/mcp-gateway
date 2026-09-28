@@ -4,7 +4,14 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class ParameterInjectionIn(BaseModel):
     tool_id: int
-    argument: str = Field(min_length=1, max_length=128)
+    argument: str = Field(
+        min_length=1,
+        max_length=128,
+        description=(
+            "要锁定的参数名。支持点号路径锁定嵌套参数，例如 request.phones；"
+            "顶层参数名本身含点时按精确名优先匹配。"
+        ),
+    )
     value: Any
 
 class ParameterInjectionRead(ParameterInjectionIn):

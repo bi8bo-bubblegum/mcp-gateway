@@ -78,6 +78,35 @@ def value_matches_schema(prop: Mapping[str, Any], value: Any) -> bool:
     return any(checks.get(name, lambda v: True)(value) for name in names)
 
 
+def resolve_injection_target(
+    schema: Mapping[str, Any] | None, argument: str
+) -> tuple[tuple[str, ...], Mapping[str, Any]] | None:
+    """把注入键解析成 (参数路径, 该参数的 schema 定义)，解析不出返回 None。
+
+    先按顶层参数名精确匹配，这样参数名里本来带点的工具不会被误拆成路径；
+    匹配不到再按点号拆成嵌套路径，逐层在 `properties` 里查证，任一层缺失即失败。
+    """
+    properties = (schema or {}).get("properties") or {}
+    if argument in properties:
+        prop = properties[argument]
+        return ((argument,), prop) if isinstance(prop, Mapping) else None
+
+    parts = argument.split(".")
+    if len(parts) < 2 or any(not part for part in parts):
+        return None
+
+    # 合成一个根节点，让每一层都走同样的 "取 properties 再取名字" 逻辑
+    node: Any = {"properties": properties}
+    for part in parts:
+        props = node.get("properties") if isinstance(node, Mapping) else None
+        if not isinstance(props, Mapping):
+            return None
+        node = props.get(part)
+        if not isinstance(node, Mapping):
+            return None
+    return tuple(parts), node
+
+
 class TokenService:
     def __init__(
         self,
@@ -442,13 +471,12 @@ class TokenService:
                 raise TokenServiceError(
                     f"parameter injection targets tool {tool_id}, which is not allowed"
                 )
-            properties = (tool.input_schema or {}).get("properties") or {}
-            prop = properties.get(argument)
-            if prop is None:
+            target = resolve_injection_target(tool.input_schema, argument)
+            if target is None:
                 raise TokenServiceError(
                     f"tool {tool_id} has no argument '{argument}' to inject"
                 )
-            if not value_matches_schema(prop, value):
+            if not value_matches_schema(target[1], value):
                 raise TokenServiceError(
                     f"value for '{argument}' does not match the tool schema"
                 )

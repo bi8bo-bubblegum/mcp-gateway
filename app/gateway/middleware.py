@@ -122,22 +122,46 @@ class AuditMiddleware(Middleware):
             await self._finish(context, event_id, "failed", error_type="CancelledError")
             raise
         except ToolError:
-            await self._finish(context, event_id, "denied")
+            # fastmcp 服务端会把工具抛出的任何异常都包成 ToolError（上游超时、
+            # 连接被拒、上游 429 全都走 server.py 的这条转换），所以拿到 ToolError
+            # 不等于"被策略拦下"。status=None 表示交给拒绝原因来判定：只有
+            # PolicyMiddleware 真的写下了原因才算 denied，否则这是一次失败的上游调用。
+            await self._finish(context, event_id, None, error_type="ToolError")
             raise
         except Exception as error:
             await self._finish(context, event_id, "failed", error_type=type(error).__name__)
             raise
 
-        await self._finish(context, event_id, "succeeded")
+        # 上游把错误当成正常结果返回时（MCP 的 isError 结果），fastmcp 不会抛异常，
+        # 这里拿到的就是 is_error=True 的 ToolResult。原先一律记 succeeded，等于把
+        # 上游报的错从审计里抹掉。
+        if result.is_error:
+            await self._finish(context, event_id, "failed", error_type="ToolResultError")
+        else:
+            await self._finish(context, event_id, "succeeded")
         return result
 
-    async def _finish(self, context: MiddlewareContext, event_id: int, status: str, *, error_type: str | None = None) -> None:
+    async def _finish(
+        self,
+        context: MiddlewareContext,
+        event_id: int,
+        status: str | None,
+        *,
+        error_type: str | None = None,
+    ) -> None:
+        """写终态。status 为 None 时按拒绝原因判定 denied / failed。"""
         reason = None
         effective = None
         ctx = context.fastmcp_context
         if ctx is not None:
             reason = await ctx.get_state(STATE_DENIAL_REASON)
             effective = await ctx.get_state(STATE_EFFECTIVE_ARGUMENTS)
+        if status is None:
+            if reason:
+                status = "denied"
+                error_type = None  # 策略拒绝是一次决策，不是错误
+            else:
+                status = "failed"
         try:
             await asyncio.shield(
                 self._audit.complete(

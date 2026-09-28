@@ -23,7 +23,7 @@ class AuditService:
     def __init__(self, *, hasher: TokenHasher, touch_interval: float = 60.0) -> None:
         self._hasher = hasher
         self._touch_interval = touch_interval
-        self._touched_at = dict[int, float] = {}
+        self._touched_at: dict[int, float] = {}
 
     def _should_touch(self, token_id: int) -> bool:
         now = time.monotonic()

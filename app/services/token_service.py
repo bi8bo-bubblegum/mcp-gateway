@@ -465,6 +465,7 @@ class TokenService:
                     f"tool {tool.id} is high risk; enable allow_high_risk first"
                 )
 
+        by_tool: dict[int, list[tuple[tuple[str, ...], str]]] = {}
         for (tool_id, argument), value in injections.items():
             tool = tools.get(tool_id)
             if tool is None:
@@ -476,7 +477,22 @@ class TokenService:
                 raise TokenServiceError(
                     f"tool {tool_id} has no argument '{argument}' to inject"
                 )
-            if not value_matches_schema(target[1], value):
+            path, prop = target
+            if not value_matches_schema(prop, value):
                 raise TokenServiceError(
                     f"value for '{argument}' does not match the tool schema"
                 )
+            by_tool.setdefault(tool_id, []).append((path, argument))
+
+        # 同一工具上，一个注入键是另一个的前缀时（如 request 与 request.phones），
+        # 是先整体覆盖再局部覆盖、还是反过来，没有唯一合理答案。拒绝掉，
+        # 免得配出一条自己都说不清最终生效值的规则。
+        for tool_id, entries in by_tool.items():
+            for index, (path, argument) in enumerate(entries):
+                for other_path, other in entries[index + 1 :]:
+                    shorter, longer = sorted((path, other_path), key=len)
+                    if longer[: len(shorter)] == shorter:
+                        raise TokenServiceError(
+                            f"tool {tool_id}: injections '{argument}' and '{other}' "
+                            "overlap; keep only the more specific one"
+                        )

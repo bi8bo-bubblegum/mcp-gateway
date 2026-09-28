@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 from collections.abc import Mapping
@@ -52,6 +53,7 @@ class RuntimeRegistry:
             max_slot_idle=settings.upstream_pool_slot_max_idle,
         )
         self._snapshot: RuntimeSnapshot | None = None
+        self._lock = asyncio.Lock()
 
     @property
     def pool(self) -> UpstreamClientPool:
@@ -70,6 +72,16 @@ class RuntimeRegistry:
         cached = self._snapshot
         if cached is not None and cached.revision == revision:
             return cached
+        # revision 变化后所有请求都会同时到达这里，没有锁就是 N 份重复的
+        # 全表查询。锁内重新读一次 revision 并复查，避免排队者重复重建。
+        async with self._lock:
+            revision = await self._revisions.current()
+            cached = self._snapshot
+            if cached is not None and cached.revision == revision:
+                return cached
+            return await self._rebuild(revision)
+
+    async def _rebuild(self, revision: int) -> RuntimeSnapshot:
         from app.db.session import session_scope
         async with session_scope() as session:
             service_rows = list(
@@ -131,11 +143,12 @@ class RuntimeRegistry:
                     input_schema=dict(row.input_schema or {}),
                 )
 
-        self._snapshot = RuntimeSnapshot(
+        snapshot = RuntimeSnapshot(
             revision=revision,
             services=MappingProxyType(services),
             descriptors=MappingProxyType(descriptors),
         )
-        return self._snapshot
+        self._snapshot = snapshot
+        return snapshot
 
 

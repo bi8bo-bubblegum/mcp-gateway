@@ -7,6 +7,7 @@ from typing import Any
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.concurrency import KeyedLocks
 from app.core.config import Settings
 from app.core.security import (
     TokenHasher,
@@ -90,6 +91,7 @@ class TokenService:
         self._revisions = revisions
         self._by_hash: dict[str, _CacheEntry] = {}
         self._by_id: dict[int, _CacheEntry] = {}
+        self._locks = KeyedLocks()
 
     # -------------------------------------------------------- verification
 
@@ -103,26 +105,35 @@ class TokenService:
         if cached is not None and self._fresh(cached, revision):
             return cached.snapshot
 
-        from app.db.session import session_scope
+        # 缓存未命中时加锁：policy_cache_ttl 到期那一刻，同一 token 的并发
+        # 请求否则会各自查库（一次 verify 是 1 条 token + 3 条策略查询）。
+        # 锁表有上界，不会被客户端乱编的 token 撑爆。
+        async with self._locks.hold(f"hash:{token_hash}"):
+            revision = await self._revisions.current()
+            cached = self._by_hash.get(token_hash)
+            if cached is not None and self._fresh(cached, revision):
+                return cached.snapshot  # 等锁期间已被其他协程填好
 
-        async with session_scope() as session:
-            result = await session.execute(
-                select(Token).where(Token.token_hash == token_hash)
+            from app.db.session import session_scope
+
+            async with session_scope() as session:
+                result = await session.execute(
+                    select(Token).where(Token.token_hash == token_hash)
+                )
+                token = result.scalar_one_or_none()
+                if token is None or not token.enabled or token.revoked_at is not None:
+                    self._by_hash.pop(token_hash, None)
+                    return None
+                snapshot = await self._build_snapshot(session, token)
+
+            entry = _CacheEntry(
+                snapshot=snapshot,
+                revision=revision,
+                expires_at=time.monotonic() + self._settings.policy_cache_ttl,
             )
-            token = result.scalar_one_or_none()
-            if token is None or not token.enabled or token.revoked_at is not None:
-                self._by_hash.pop(token_hash, None)
-                return None
-            snapshot = await self._build_snapshot(session, token)
-
-        entry = _CacheEntry(
-            snapshot=snapshot,
-            revision=revision,
-            expires_at=time.monotonic() + self._settings.policy_cache_ttl,
-        )
-        self._by_hash[token_hash] = entry
-        self._by_id[snapshot.id] = entry
-        return snapshot
+            self._by_hash[token_hash] = entry
+            self._by_id[snapshot.id] = entry
+            return snapshot
 
     async def snapshot_by_id(self, token_id: int) -> TokenSnapshot | None:
         revision = await self._revisions.current()
@@ -130,21 +141,27 @@ class TokenService:
         if cached is not None and self._fresh(cached, revision):
             return cached.snapshot
 
-        from app.db.session import session_scope
+        async with self._locks.hold(f"id:{token_id}"):
+            revision = await self._revisions.current()
+            cached = self._by_id.get(token_id)
+            if cached is not None and self._fresh(cached, revision):
+                return cached.snapshot  # 等锁期间已被其他协程填好
 
-        async with session_scope() as session:
-            token = await session.get(Token, token_id)
-            if token is None or not token.enabled or token.revoked_at is not None:
-                return None
-            snapshot = await self._build_snapshot(session, token)
+            from app.db.session import session_scope
 
-        entry = _CacheEntry(
-            snapshot=snapshot,
-            revision=revision,
-            expires_at=time.monotonic() + self._settings.policy_cache_ttl,
-        )
-        self._by_id[token_id] = entry
-        return snapshot
+            async with session_scope() as session:
+                token = await session.get(Token, token_id)
+                if token is None or not token.enabled or token.revoked_at is not None:
+                    return None
+                snapshot = await self._build_snapshot(session, token)
+
+            entry = _CacheEntry(
+                snapshot=snapshot,
+                revision=revision,
+                expires_at=time.monotonic() + self._settings.policy_cache_ttl,
+            )
+            self._by_id[token_id] = entry
+            return snapshot
 
     def _fresh(self, entry: _CacheEntry, revision: int) -> bool:
         return entry.revision == revision and entry.expires_at > time.monotonic()

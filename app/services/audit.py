@@ -1,5 +1,5 @@
 from collections.abc import Mapping, Sequence
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import func, select, update
@@ -94,10 +94,10 @@ class AuditService:
                     effective_arguments
                 )
             started = event.started_at
-            if started is not None:
-                event.duration_ms = int(
-                    (finished - started).total_seconds() * 1000
-                )
+            if started is not None and started.tzinfo is None:
+                started = started.replace(tzinfo=timezone.utc)
+                if started is not None:
+                    event.duration_ms = int((finished - started).total_seconds() * 1000)
 
     async def query(
         self,

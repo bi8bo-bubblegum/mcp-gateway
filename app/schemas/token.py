@@ -2,6 +2,8 @@ from datetime import datetime
 from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.schemas.common import UTCTimestampModel
+
 class ParameterInjectionIn(BaseModel):
     tool_id: int
     argument: str = Field(
@@ -35,7 +37,7 @@ class TokenPolicyUpdate(BaseModel):
     allowed_tool_ids: list[int] | None = None
     parameter_injections: list[ParameterInjectionIn] | None = None
 
-class TokenRead(BaseModel):
+class TokenRead(UTCTimestampModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int

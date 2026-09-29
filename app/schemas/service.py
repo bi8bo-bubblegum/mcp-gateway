@@ -2,7 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field, ConfigDict
 
-from app.schemas.common import SLUG_PATTERN, ServiceHealth
+from app.schemas.common import SLUG_PATTERN, ServiceHealth, UTCTimestampModel
 
 
 class ServiceAuthIn(BaseModel):
@@ -22,7 +22,7 @@ class ServiceUpdate(BaseModel):
     auth: ServiceAuthIn | None = None
     enabled: bool | None = None
 
-class ServiceRead(BaseModel):
+class ServiceRead(UTCTimestampModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int

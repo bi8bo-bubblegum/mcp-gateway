@@ -3,10 +3,10 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
-from app.schemas.common import RiskLevel
+from app.schemas.common import RiskLevel, UTCTimestampModel
 
 
-class ToolRead(BaseModel):
+class ToolRead(UTCTimestampModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int

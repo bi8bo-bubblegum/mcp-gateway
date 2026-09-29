@@ -1,9 +1,9 @@
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict
 
-from app.schemas.common import AuditStatus
+from app.schemas.common import AuditStatus, UTCTimestampModel
 
-class AuditEventRead(BaseModel):
+class AuditEventRead(UTCTimestampModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int

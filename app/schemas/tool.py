@@ -19,6 +19,7 @@ class ToolRead(UTCTimestampModel):
     schema_hash: str
     risk: RiskLevel
     enabled: bool
+    available: bool
     discovered_at: datetime
     updated_at: datetime
 

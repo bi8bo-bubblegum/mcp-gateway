@@ -394,7 +394,7 @@ class TokenService:
     async def _require_token(self, session: AsyncSession, token_id: int) -> Token:
         token = await session.get(Token, token_id)
         if token is None:
-            raise TokenServiceError(f"token {token_id} not found")
+            raise TokenServiceError(f"令牌 {token_id} 不存在")
         return token
 
     async def _current_service_ids(
@@ -501,7 +501,7 @@ class TokenService:
             )
             missing = visible_service_ids - {int(row) for row in result.scalars()}
             if missing:
-                raise TokenServiceError(f"unknown service ids: {sorted(missing)}")
+                raise TokenServiceError(f"以下服务不存在：{sorted(missing)}")
 
         tools: dict[int, Tool] = {}
         if allowed_tool_ids:
@@ -511,16 +511,16 @@ class TokenService:
             tools = {tool.id: tool for tool in result.scalars()}
             missing = allowed_tool_ids - set(tools)
             if missing:
-                raise TokenServiceError(f"unknown tool ids: {sorted(missing)}")
+                raise TokenServiceError(f"以下工具不存在：{sorted(missing)}")
 
         for tool in tools.values():
             if tool.service_id not in visible_service_ids:
                 raise TokenServiceError(
-                    f"tool {tool.id} belongs to a service that is not visible to this token"
+                    f"工具 {tool.id} 所在服务不在「可见服务」中，请先勾选对应服务"
                 )
             if tool.risk == "high" and not allow_high_risk:
                 raise TokenServiceError(
-                    f"tool {tool.id} is high risk; enable allow_high_risk first"
+                    f"工具 {tool.id} 为高风险，请先打开「允许调用高风险工具」开关"
                 )
 
         by_tool: dict[int, list[tuple[tuple[str, ...], str]]] = {}
@@ -528,17 +528,17 @@ class TokenService:
             tool = tools.get(tool_id)
             if tool is None:
                 raise TokenServiceError(
-                    f"parameter injection targets tool {tool_id}, which is not allowed"
+                    f"注入参数指向的工具 {tool_id} 不在允许列表中"
                 )
             target = resolve_injection_target(tool.input_schema, argument)
             if target is None:
                 raise TokenServiceError(
-                    f"tool {tool_id} has no argument '{argument}' to inject"
+                    f"工具 {tool_id} 不存在参数 '{argument}'，无法注入"
                 )
             path, prop = target
             if not value_matches_schema(prop, value):
                 raise TokenServiceError(
-                    f"value for '{argument}' does not match the tool schema"
+                    f"参数 '{argument}' 的值不符合该工具的 Schema 定义"
                 )
             by_tool.setdefault(tool_id, []).append((path, argument))
 
@@ -551,6 +551,6 @@ class TokenService:
                     shorter, longer = sorted((path, other_path), key=len)
                     if longer[: len(shorter)] == shorter:
                         raise TokenServiceError(
-                            f"tool {tool_id}: injections '{argument}' and '{other}' "
-                            "overlap; keep only the more specific one"
+                            f"工具 {tool_id} 的注入路径 '{argument}' 与 '{other}' "
+                            "重叠，请只保留更具体的一条"
                         )

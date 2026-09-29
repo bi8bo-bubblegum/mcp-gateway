@@ -8,3 +8,6 @@ docs/
 alembic.ini
 alembic/
 .workbuddy
+frontend/dist
+frontend/node_modules
+ui-prototype/

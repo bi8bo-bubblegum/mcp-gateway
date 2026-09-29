@@ -105,10 +105,15 @@ class AuditService:
                     effective_arguments
                 )
             started = event.started_at
-            if started is not None and started.tzinfo is None:
-                started = started.replace(tzinfo=timezone.utc)
-                if started is not None:
-                    event.duration_ms = int((finished - started).total_seconds() * 1000)
+            if started is not None:
+                # utcnow() 返回 naive UTC，MySQL 取回的 started_at 也是 naive；
+                # 两侧都补齐 tzinfo 再相减，否则 naive - aware 直接 TypeError，
+                # complete() 整体失败、事件永远停留在 started。
+                if finished.tzinfo is None:
+                    finished = finished.replace(tzinfo=timezone.utc)
+                if started.tzinfo is None:
+                    started = started.replace(tzinfo=timezone.utc)
+                event.duration_ms = int((finished - started).total_seconds() * 1000)
 
     async def query(
         self,

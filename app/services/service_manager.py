@@ -77,7 +77,7 @@ class ServiceManager:
     async def get_service(self, session: AsyncSession, service_id: int) -> Service:
         service = await session.get(Service, service_id)
         if service is None:
-            raise ServiceManagerError(f"service {service_id} not found")
+            raise ServiceManagerError(f"服务 {service_id} 不存在")
         return service
 
     # --------------------------------------------------------------- writes
@@ -89,7 +89,7 @@ class ServiceManager:
             select(Service.id).where(Service.slug == payload.slug)
         )
         if existing.scalar_one_or_none() is not None:
-            raise ServiceManagerError(f"slug '{payload.slug}' already exists")
+            raise ServiceManagerError(f"标识 '{payload.slug}' 已存在")
 
         service = Service(
             slug=payload.slug,
@@ -155,7 +155,7 @@ class ServiceManager:
         service = await self.get_service(session, service_id)
         if enabled and service.health != "healthy":
             raise ServiceManagerError(
-                f"service '{service.slug}' is not healthy; refresh credentials first"
+                f"服务 '{service.slug}' 当前不健康，请先刷新并确保上游健康后再启用"
             )
         service.enabled = enabled
         await bump_revision(session)

@@ -52,6 +52,12 @@ class Settings(BaseSettings):
     secret_key: str = Field(default="dev-only-change-me", repr=False)
 
     policy_cache_ttl: float = 30.0
+    # 无效 token 的负缓存。伪造 token 是攻击者完全可控的输入，没有负缓存时
+    # 每个都换一次数据库查询。时间要短——token 被重新启用后本进程最多等这么
+    # 久才会重新接受它（其他进程还要叠加 revision 广播的延迟）。
+    policy_negative_cache_ttl: float = 5.0
+    # 上界，防止攻击者用海量唯一伪造 token 把内存撑大
+    policy_negative_cache_size: int = 4096
     revision_poll_interval: float = 1.0
     revision_cache_ttl: float = 1.0
     health_interval: float = 30.0

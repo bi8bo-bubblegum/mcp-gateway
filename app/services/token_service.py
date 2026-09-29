@@ -1,4 +1,5 @@
 import time
+from collections import OrderedDict
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from types import MappingProxyType
@@ -51,6 +52,50 @@ class _CacheEntry:
     snapshot: TokenSnapshot
     revision: int
     expires_at: float
+
+
+class _NegativeCache:
+    """无效 token 的短期负缓存，挡掉伪造 token 与失效 token 的重试风暴。
+
+    没有它时每个无效 token 都要查一次库。伪造 token 是攻击者完全可控的输入，
+    1000 req/s 的垃圾流量就是 1000 次查询/s，连接池被占满后正常请求只能在
+    pool_timeout 上排队，最后拿到 503。
+
+    key 直接来自客户端，所以必须有上界，否则它自己就是内存放大点——和
+    KeyedLocks 是同一类问题。过期时间在写入时固定、命中不延长，避免攻击者
+    靠持续请求把某条目永久钉住。
+
+    条目同时绑定 revision：任何配置变更都会让旧判定作废，语义与正向缓存一致。
+    """
+
+    def __init__(self, *, maxsize: int, ttl: float) -> None:
+        self._maxsize = maxsize
+        self._ttl = ttl
+        self._entries: OrderedDict[str, tuple[int, float]] = OrderedDict()
+
+    def hit(self, key: str, revision: int) -> bool:
+        """命中且未过期返回 True；过期或 revision 不符则顺手清掉。"""
+        entry = self._entries.get(key)
+        if entry is None:
+            return False
+        entry_revision, expires_at = entry
+        if entry_revision != revision or expires_at <= time.monotonic():
+            del self._entries[key]
+            return False
+        self._entries.move_to_end(key)
+        return True
+
+    def add(self, key: str, revision: int) -> None:
+        self._entries[key] = (revision, time.monotonic() + self._ttl)
+        self._entries.move_to_end(key)
+        while len(self._entries) > self._maxsize:
+            self._entries.popitem(last=False)
+
+    def clear(self) -> None:
+        self._entries.clear()
+
+    def __len__(self) -> int:
+        return len(self._entries)
 
 
 def value_matches_schema(prop: Mapping[str, Any], value: Any) -> bool:
@@ -121,6 +166,10 @@ class TokenService:
         self._by_hash: dict[str, _CacheEntry] = {}
         self._by_id: dict[int, _CacheEntry] = {}
         self._locks = KeyedLocks()
+        self._denied = _NegativeCache(
+            maxsize=settings.policy_negative_cache_size,
+            ttl=settings.policy_negative_cache_ttl,
+        )
 
     # -------------------------------------------------------- verification
 
@@ -130,6 +179,8 @@ class TokenService:
             return None
         token_hash = self._hasher.hash_token(raw_token)
         revision = await self._revisions.current()
+        if self._denied.hit(token_hash, revision):
+            return None
         cached = self._by_hash.get(token_hash)
         if cached is not None and self._fresh(cached, revision):
             return cached.snapshot
@@ -139,6 +190,8 @@ class TokenService:
         # 锁表有上界，不会被客户端乱编的 token 撑爆。
         async with self._locks.hold(f"hash:{token_hash}"):
             revision = await self._revisions.current()
+            if self._denied.hit(token_hash, revision):
+                return None
             cached = self._by_hash.get(token_hash)
             if cached is not None and self._fresh(cached, revision):
                 return cached.snapshot  # 等锁期间已被其他协程填好
@@ -152,6 +205,7 @@ class TokenService:
                 token = result.scalar_one_or_none()
                 if token is None or not token.enabled or token.revoked_at is not None:
                     self._by_hash.pop(token_hash, None)
+                    self._denied.add(token_hash, revision)
                     return None
                 snapshot = await self._build_snapshot(session, token)
 
@@ -196,6 +250,10 @@ class TokenService:
         return entry.revision == revision and entry.expires_at > time.monotonic()
 
     def invalidate(self, token_id: int | None = None) -> None:
+        # 负缓存的键是哈希，按 token_id 反查不到，而这里刚发生了写操作、
+        # 任何"无效"判定都不可信，所以整体清掉。上界只有几千条，admin 写操作
+        # 又都是人工触发的，清空的代价可以忽略。
+        self._denied.clear()
         if token_id is None:
             self._by_hash.clear()
             self._by_id.clear()

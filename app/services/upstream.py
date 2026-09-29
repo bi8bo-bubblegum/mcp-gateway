@@ -55,8 +55,18 @@ def split_effective_name(name: str) -> tuple[str, str] | None:
 
 @dataclass(frozen=True)
 class UpstreamAuth:
-    bearer_token: str | None = None
-    headers: dict[str, str] = field(default_factory=dict)
+    # 明文凭证排除出 repr：headers 里通常也放 API key，同样不能进日志
+    bearer_token: str | None = field(default=None, repr=False)
+    headers: dict[str, str] = field(default_factory=dict, repr=False)
+
+    def __repr__(self) -> str:
+        """只表明凭证是否配置、有哪些 header 名，不暴露任何值。
+
+        排查"上游 401 是不是没配凭证"时要能一眼看出来，所以不能不输出，
+        但输出了就等于把密钥写进日志。
+        """
+        bearer = "set" if self.bearer_token else "none"
+        return f"UpstreamAuth(bearer_token={bearer}, headers={sorted(self.headers)})"
 
     @classmethod
     def from_payload(cls, payload: dict[str, Any] | None) -> "UpstreamAuth":

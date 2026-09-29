@@ -1,7 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import model_validator
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # .env 必须用绝对路径：相对路径是相对进程 CWD 解析的，换个目录启动就会静默
@@ -26,8 +26,13 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    database_url: str = (
-        "mysql+aiomysql://root:root@127.0.0.1:3306/mcp_gateway?charset=utf8mb4"
+    # 以下三项含明文密钥，统一排除出 repr：否则任何 logger.info("%s", settings)、
+    # 未捕获异常的 traceback（富格式化库会展开局部变量）、错误上报 SDK 都会把
+    # 它们写进日志。secret_key 同时派生 token 的 HMAC 密钥和上游凭证的 Fernet
+    # 密钥，泄露等于凭证全部可解。
+    database_url: str = Field(
+        default="mysql+aiomysql://root:root@127.0.0.1:3306/mcp_gateway?charset=utf8mb4",
+        repr=False,
     )
     db_echo: bool = False
     # 数据库连接池。每个工具调用在关键路径上写两次审计，池子偏小会直接
@@ -42,9 +47,9 @@ class Settings(BaseSettings):
     mcp_path: str = "/mcp"
 
     admin_username: str = "admin"
-    admin_password: str = "admin_best"
+    admin_password: str = Field(default="admin_best", repr=False)
 
-    secret_key: str = "dev-only-change-me"
+    secret_key: str = Field(default="dev-only-change-me", repr=False)
 
     policy_cache_ttl: float = 30.0
     revision_poll_interval: float = 1.0

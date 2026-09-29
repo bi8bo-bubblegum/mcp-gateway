@@ -27,6 +27,8 @@ class RuntimeService:
     slug: str
     name: str
     url: str
+    # 这里不用 repr=False：UpstreamAuth 自带只暴露"凭证是否已配置"的 __repr__，
+    # 留着它反而便于排查"哪个服务的上游 401"。安全性由那一处统一保证。
     auth: UpstreamAuth
 
 @dataclass(frozen=True)

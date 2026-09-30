@@ -48,3 +48,54 @@ export const DENIAL_REASON_LABEL: Record<string, string> = {
   tool_not_found: '工具不存在',
   denied: '已拒绝',
 }
+
+// ---------------- AI 网关枚举映射 ----------------
+export const AI_KIND_LABEL: Record<'chat' | 'embedding', string> = {
+  chat: '对话',
+  embedding: '向量',
+}
+
+export const AI_PERIOD_LABEL: Record<'none' | 'day' | 'month', string> = {
+  none: '不限',
+  day: '每日',
+  month: '每月',
+}
+
+export const AI_SCOPE_LABEL: Record<'request' | 'response' | 'both', string> = {
+  request: '请求',
+  response: '响应',
+  both: '请求+响应',
+}
+
+export const AI_ACTION_LABEL: Record<'block', string> = {
+  block: '拦截',
+}
+
+export const AI_STATUS_LABEL: Record<'started' | 'succeeded' | 'failed' | 'denied', string> = {
+  started: '进行中',
+  succeeded: '成功',
+  failed: '失败',
+  denied: '拒绝',
+}
+
+export const AI_STATUS_TONE: Record<
+  'started' | 'succeeded' | 'failed' | 'denied',
+  'primary' | 'success' | 'danger' | 'warning'
+> = {
+  started: 'primary',
+  succeeded: 'success',
+  failed: 'danger',
+  denied: 'warning',
+}
+
+/** 用量审计拒绝原因码 → 中文（与 MCP DENIAL_REASON_LABEL 互补，AI 侧专用） */
+export const AI_DENIAL_LABEL: Record<string, string> = {
+  invalid_api_key: '密钥无效',
+  model_not_found: '模型不存在',
+  permission_denied: '未授权',
+  insufficient_quota: '配额不足',
+  rate_limit_exceeded: '限流超限',
+  guardrail_blocked: '护栏拦截',
+  upstream_error: '上游异常',
+  cancelled: '已取消',
+}

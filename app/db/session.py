@@ -40,6 +40,15 @@ def init_engine(
             pool_timeout=pool_timeout,
             pool_recycle=pool_recycle,
         )
+    else:
+        # 测试用 :memory: 库：默认连接池每条连接是独立数据库，建表与查询若落到
+        # 不同连接就互不可见。StaticPool 让整个引擎共用同一条连接，保证
+        # create_all 与后续查询看到同一份 schema（check_same_thread 关闭以允许
+        # 协程间复用该连接）。生产用 MySQL，不会走到这条分支。
+        from sqlalchemy.pool import StaticPool
+
+        options["poolclass"] = StaticPool
+        options["connect_args"] = {"check_same_thread": False}
     _engine = create_async_engine(database_url, **options)
     _session_factory = async_sessionmaker(_engine, expire_on_commit=False, autoflush=False)
 

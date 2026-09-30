@@ -76,6 +76,16 @@ class Settings(BaseSettings):
     # 整个连接池（服务被删或凭证改过之后留下的旧池）全空闲多久后回收
     upstream_pool_idle_ttl: float = 300.0
 
+    # ── AI 网关上游调用 ──────────────────────────────────────────
+    # 单请求总超时：流式下要覆盖整段 SSE，故比连接超时长很多。
+    ai_request_timeout: float = 120.0
+    # 仅建立 TCP/TLS 连接的超时，区分于上面的请求超时，避免握手阶段干等。
+    ai_connect_timeout: float = 10.0
+    # Key 鉴权快照的缓存时长：与 revision 广播双条件失效，TTL 是兜底的本地过期。
+    ai_key_cache_ttl: float = 30.0
+    # 限流滑动窗口长度：rate_limit_rpm 的含义是"该窗口内最多多少请求"。
+    ai_rate_limit_window: float = 60.0
+
     # 仅限本机开发：默认值只适合跑在 127.0.0.1 上。任何对外可达的部署都必须
     # 覆盖 secret_key 与 admin_password，而不是打开这个开关。
     allow_insecure_defaults: bool = False

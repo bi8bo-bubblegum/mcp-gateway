@@ -1,0 +1,109 @@
+/* ============================================================
+   MCP 网关控制台 · Design Tokens
+   来源：Ardot 设计稿「MCP网关控制台 - 静态UI原型」(fileId 730676040123799)
+   视觉体系：TDesign 风格（模板 00001）· 圆角渐变版
+   ============================================================ */
+
+:root {
+  /* ---------- 1. 品牌色 ---------- */
+  --color-primary:        #0052D9;
+  --color-primary-light:  #ECF2FE;
+  --color-primary-12:     rgba(0, 82, 217, .12);
+  --color-primary-hover:  #2666DE;
+  --color-primary-active: #0042AF;
+
+  /* 渐变（品牌主轴：深蓝 → 亮蓝，135° 对角） */
+  --grad-primary:       linear-gradient(135deg, #2666DE 0%, #0052D9 55%, #0647B8 100%);
+  --grad-primary-hover: linear-gradient(135deg, #3D77E3 0%, #1B5BD6 55%, #0B4FC4 100%);
+  --grad-brand-soft:    linear-gradient(135deg, rgba(38, 102, 222, .12), rgba(0, 82, 217, .04));
+  --grad-page-glow:     radial-gradient(1100px 420px at 18% -8%, rgba(0, 82, 217, .07), transparent 62%),
+                        radial-gradient(900px 380px at 88% -6%, rgba(43, 164, 113, .05), transparent 58%);
+
+  /* ---------- 2. 功能色 ---------- */
+  --color-success:        #2BA471;
+  --color-success-12:     rgba(43, 164, 113, .12);
+  --color-danger:         #D54941;
+  --color-danger-12:      rgba(213, 73, 65, .12);
+  --color-warning:        #E37318;
+  --color-warning-12:     rgba(227, 115, 24, .12);
+
+  /* ---------- 3. 中性色 ---------- */
+  --color-text-primary:   #1A1A1A;
+  --color-text-secondary: #5E5E5E;
+  --color-text-muted:     #8A8A8A;
+  --color-bg-page:        #F3F3F3;
+  --color-bg-card:        #FFFFFF;
+  --color-bg-group:       #F9FAFB;
+  --color-bg-field:       #F5F6FA;
+  --color-divider-strong: #E7E7E7;
+  --color-divider-weak:   #F0F0F0;
+
+  /* ---------- 4. 字体 ---------- */
+  --font-family: 'Noto Sans SC', -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+
+  --font-kpi-value:    700 30px/38px var(--font-family);
+  --font-page-title:   700 22px/30px var(--font-family);
+  --font-drawer-title: 700 18px/26px var(--font-family);
+  --font-card-title:   500 16px/22px var(--font-family);
+  --font-health-name:  500 15px/20px var(--font-family);
+  --font-row-title:    500 14px/20px var(--font-family);
+  --font-menu:         400 14px/18px var(--font-family);
+  --font-body:         400 13px/18px var(--font-family);
+  --font-caption:      400 12px/16px var(--font-family);
+
+  /* ---------- 5. 圆角（整体上调一档） ---------- */
+  --radius-checkbox:  4px;
+  --radius-control:   8px;
+  --radius-input:     10px;
+  --radius-card:      16px;
+  --radius-chip:      12px;
+  --radius-pill:      999px;
+
+  /* ---------- 6. 阴影 ---------- */
+  --shadow-card:  0 1px 2px rgba(23, 43, 99, .02), 0 10px 28px -14px rgba(23, 43, 99, .10);
+  --shadow-float: 0 24px 60px -20px rgba(4, 32, 102, .45);
+  --shadow-btn:   0 4px 12px -4px rgba(0, 82, 217, .40);
+  --shadow-btn-hover: 0 8px 18px -6px rgba(0, 82, 217, .50);
+  --shadow-menu:  0 6px 14px -6px rgba(0, 82, 217, .45);
+
+  /* ---------- 7. 布局尺寸 ---------- */
+  --size-header-height: 56px;
+  --size-sidebar-width: 232px;
+  --size-menu-width:    216px;
+  --size-menu-height:   40px;
+  --size-control-height: 32px;
+  --size-field-height:  36px;
+  --size-kpi-height:    110px;
+
+  --space-page-x:      24px;
+  --space-card-inner:  16px;
+  --space-menu-indent: 24px;
+  --space-control-gap: 8px;
+
+  /* ---------- 8. TDesign 主题映射 ---------- */
+  --td-brand-color:        var(--color-primary);
+  --td-brand-color-hover:  var(--color-primary-hover);
+  --td-brand-color-active: var(--color-primary-active);
+  --td-brand-color-light:  var(--color-primary-light);
+  --td-success-color:      var(--color-success);
+  --td-error-color:        var(--color-danger);
+  --td-warning-color:      var(--color-warning);
+  --td-bg-color-page:      var(--color-bg-page);
+  --td-bg-color-container: var(--color-bg-card);
+  --td-text-color-primary: var(--color-text-primary);
+  --td-text-color-secondary: var(--color-text-secondary);
+  --td-text-color-placeholder: var(--color-text-muted);
+  --td-component-stroke:   var(--color-divider-strong);
+  --td-border-level-1-color: var(--color-divider-weak);
+  --td-border-level-2-color: var(--color-divider-strong);
+  --td-radius-small:       4px;
+  --td-radius-medium:      8px;
+  --td-radius-large:       12px;
+  --td-radius-round:       var(--radius-pill);
+  --td-radius-circle:      50%;
+  --td-font-family:        var(--font-family);
+  /* TDesign 组件默认阴影统一柔化 */
+  --td-shadow-1: var(--shadow-card);
+  --td-shadow-2: 0 8px 24px -8px rgba(23, 43, 99, .16);
+  --td-shadow-3: var(--shadow-float);
+}

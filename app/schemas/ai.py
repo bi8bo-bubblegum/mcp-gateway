@@ -4,7 +4,7 @@
 时间字段继承 UTCTimestampModel（给库里的 naive UTC 补时区标记再输出，避免前端
 按本地时间误读）。
 """
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -98,6 +98,26 @@ class AiModelRead(UTCTimestampModel):
     updated_at: datetime
 
 
+class AiPullModelRead(BaseModel):
+    """上游 /v1/models 返回的候选模型（仅透出挑选所需的最小字段）。"""
+
+    id: str
+    owned_by: str | None = None
+
+
+class AiModelImportItem(BaseModel):
+    """批量导入的一条候选：上游名必填，alias 缺省则与上游名一致。"""
+
+    provider_model_name: str = Field(min_length=1, max_length=128)
+    alias: str | None = Field(default=None, min_length=1, max_length=128)
+    kind: AiModelKind = AI_MODEL_KIND_CHAT
+
+
+class AiModelImportRequest(BaseModel):
+    provider_id: int
+    items: list[AiModelImportItem] = Field(default_factory=list)
+
+
 # ── AI Key ───────────────────────────────────────────────────────
 class AiKeyCreate(BaseModel):
     name: str = Field(min_length=1, max_length=128)
@@ -127,6 +147,11 @@ class AiKeyRead(UTCTimestampModel):
 class AiKeyCreated(AiKeyRead):
     # 明文只在创建响应出现一次，库里只存哈希
     key: str
+
+
+class AiKeyDetail(AiKeyRead):
+    # 详情接口额外带授权模型 id，供编辑抽屉回填多选
+    model_ids: list[int] = Field(default_factory=list)
 
 
 class AiKeyPolicyUpdate(BaseModel):
@@ -174,6 +199,18 @@ class AiUsageEventPage(BaseModel):
     items: list[AiUsageEventRead] = Field(default_factory=list)
 
 
+class AiUsageDailyRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    key_id: int
+    # day 是纯日期（无时区），不继承 UTCTimestampModel
+    day: date
+    requests: int
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
+
+
 # ── 护栏规则 ──────────────────────────────────────────────────────
 class GuardrailRuleCreate(BaseModel):
     name: str = Field(min_length=1, max_length=128)
@@ -202,3 +239,19 @@ class GuardrailRuleRead(UTCTimestampModel):
     enabled: bool
     created_at: datetime
     updated_at: datetime
+
+
+class GuardrailBulkCreate(BaseModel):
+    """批量导入：text 按行拆成关键词，每行一条规则（规则名取该行文本）。"""
+
+    name_prefix: str = Field(default="", max_length=64)
+    text: str = Field(min_length=1)
+    scope: GuardrailScope = GUARDRAIL_SCOPE_REQUEST
+    action: GuardrailAction = GUARDRAIL_ACTION_BLOCK
+    enabled: bool = True
+
+
+class GuardrailBulkResult(BaseModel):
+    created: int
+    skipped: int
+    rules: list[GuardrailRuleRead] = Field(default_factory=list)

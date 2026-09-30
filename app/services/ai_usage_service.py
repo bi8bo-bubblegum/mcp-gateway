@@ -8,7 +8,7 @@ complete 在响应后终结事件并记录用量/护栏命中/时延，并算 du
 是 naive，但某些路径下可能是 aware。两侧相减前必须显式补 tzinfo，否则
 naive - aware 直接 TypeError，complete 失败、事件永远卡在 started。
 """
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any, Sequence
 
 from sqlalchemy import func, select
@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.metering import Usage
 from app.db.base import utcnow
-from app.db.models import AiUsageEvent
+from app.db.models import AiUsageDaily, AiUsageEvent
 from app.db.session import session_scope
 
 
@@ -155,3 +155,30 @@ class AiUsageService:
             )
             items = list(rows.scalars())
         return total, items
+
+    async def query_daily(
+        self,
+        *,
+        key_id: int | None = None,
+        day_from: date | None = None,
+        day_to: date | None = None,
+    ) -> list[AiUsageDaily]:
+        """按 (key, 日期区间) 查日汇总，供管理端展示配额消耗趋势。
+
+        读的是配额判定用的同一张热表，所以管理端看到的就是限流真正依据的数字。
+        """
+        conditions = []
+        if key_id is not None:
+            conditions.append(AiUsageDaily.key_id == key_id)
+        if day_from is not None:
+            conditions.append(AiUsageDaily.day >= day_from)
+        if day_to is not None:
+            conditions.append(AiUsageDaily.day <= day_to)
+
+        async with session_scope() as session:
+            rows = await session.execute(
+                select(AiUsageDaily)
+                .where(*conditions)
+                .order_by(AiUsageDaily.day.desc(), AiUsageDaily.key_id)
+            )
+            return list(rows.scalars())

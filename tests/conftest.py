@@ -35,6 +35,15 @@ def settings() -> Settings:
 
 
 @pytest.fixture
+def admin_auth(settings: Settings) -> dict[str, str]:
+    """管理端 HTTP Basic 认证头，供 /admin/v1/ai/* 接口测试使用。"""
+    import base64
+
+    raw = f"{settings.admin_username}:{settings.admin_password}".encode()
+    return {"Authorization": "Basic " + base64.b64encode(raw).decode()}
+
+
+@pytest.fixture
 def upstream():
     """假 OpenAI 兼容上游实例（每测试全新一个，mode 默认 ok）。"""
     from tests.fakes.openai_upstream import make_upstream_app

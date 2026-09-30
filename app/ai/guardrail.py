@@ -51,9 +51,10 @@ class GuardrailEngine:
 class GuardrailLoader:
     """每请求从 DB 加载 enabled 规则并构建引擎（v1 取舍）。
 
-    护栏规则表极小（几十到几百条），且管理端改完会 bump_revision，但热路径上
-    直接按 enabled 查一次最省心、也避免把规则塞进 revision 快照增加其体积。
-    后续若规则量变大或需要零延迟，可并入 AiRuntimeRegistry 的快照一起重建。
+    护栏规则表极小（几十到几百条），热路径上直接按 enabled 查一次最省心、也
+    避免把规则塞进 revision 快照增加其体积；也正因为每请求重查，管理端改完
+    规则下一个请求即生效，无需任何缓存失效动作。后续若规则量变大或需要零
+    延迟，可并入 AiRuntimeRegistry 的快照一起重建。
     """
 
     async def load(self) -> GuardrailEngine:

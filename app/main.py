@@ -8,6 +8,11 @@ from fastmcp import FastMCP
 from fastmcp.utilities.lifespan import combine_lifespans
 from sqlalchemy import text
 
+from app.admin import ai_guardrails as ai_guardrail_routes
+from app.admin import ai_keys as ai_key_routes
+from app.admin import ai_models as ai_model_routes
+from app.admin import ai_providers as ai_provider_routes
+from app.admin import ai_usage as ai_usage_routes
 from app.admin import audit as audit_routes
 from app.admin import services as service_routes
 from app.admin import tokens as token_routes
@@ -27,7 +32,10 @@ from app.gateway.health import BackgroundLoops
 from app.gateway.middleware import AuditMiddleware, PolicyMiddleware
 from app.gateway.provider import GatewayProvider
 from app.gateway.runtime import RuntimeRegistry
+from app.services.ai_guardrail_service import AiGuardrailService
 from app.services.ai_key_service import AiKeyService
+from app.services.ai_model_service import AiModelService
+from app.services.ai_provider_service import AiProviderService
 from app.services.ai_usage_service import AiUsageService
 from app.services.audit import AuditService
 from app.services.revision import RevisionStore, ensure_revision_row
@@ -60,6 +68,10 @@ class Container:
     ai_guardrails: GuardrailLoader
     ai_pool: AiUpstreamPool
     ai_rate_limiter: RateLimiter
+    # ── AI 网关管理端服务 ──
+    ai_providers: AiProviderService
+    ai_models: AiModelService
+    ai_guardrail_service: AiGuardrailService
 
 
 def build_container(
@@ -107,6 +119,11 @@ def build_container(
     ai_pool = AiUpstreamPool(settings, client_factory=ai_client_factory)
     ai_rate_limiter = RateLimiter(settings)
 
+    # 管理端写入服务：厂商需要 secret_box 加密上游密钥，拉取模型清单复用同一个上游池
+    ai_providers = AiProviderService(secret_box=secret_box, pool=ai_pool)
+    ai_models = AiModelService()
+    ai_guardrail_service = AiGuardrailService()
+
     mcp = FastMCP(
         "MCP Gateway",
         instructions=(
@@ -146,6 +163,9 @@ def build_container(
         ai_guardrails=ai_guardrails,
         ai_pool=ai_pool,
         ai_rate_limiter=ai_rate_limiter,
+        ai_providers=ai_providers,
+        ai_models=ai_models,
+        ai_guardrail_service=ai_guardrail_service,
     )
 
 
@@ -198,6 +218,12 @@ def build_app(container: Container | None = None) -> FastAPI:
     app.include_router(tool_routes.router)
     app.include_router(token_routes.router)
     app.include_router(audit_routes.router)
+    # AI 网关管理端（五个资源，与 MCP 管理端同一套 Basic 认证）
+    app.include_router(ai_provider_routes.router)
+    app.include_router(ai_model_routes.router)
+    app.include_router(ai_key_routes.router)
+    app.include_router(ai_usage_routes.router)
+    app.include_router(ai_guardrail_routes.router)
 
     @app.get("/health/live", tags=["health"])
     async def live() -> dict[str, str]:

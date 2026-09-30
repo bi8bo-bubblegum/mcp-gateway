@@ -1,12 +1,22 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { isLoggedIn } from '@/stores/auth'
+import { GATEWAY_STORAGE_KEY } from '@/config/gateways'
+
+/** 根路径落到"上次用的网关"：切换器的记忆写在这里读，刷新/重开都回到上次那侧 */
+function lastGatewayEntry(): string {
+  try {
+    return localStorage.getItem(GATEWAY_STORAGE_KEY) === 'ai' ? '/ai' : '/mcp'
+  } catch {
+    // 隐私模式等无法读 localStorage 的场景，退回默认网关
+    return '/mcp'
+  }
+}
 
 const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/login', name: 'login', component: () => import('@/views/Login.vue') },
-    // 根路径统一落到 MCP 网关概览；AI 网关通过顶栏切换器进入
-    { path: '/', redirect: '/mcp' },
+    { path: '/', redirect: lastGatewayEntry },
     {
       path: '/mcp',
       component: () => import('@/layouts/ConsoleLayout.vue'),

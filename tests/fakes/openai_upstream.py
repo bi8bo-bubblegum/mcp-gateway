@@ -28,6 +28,10 @@ def make_upstream_app() -> FastAPI:
     app = FastAPI()
     # 由测试在调用前改写，控制故障模式
     app.state.mode = "ok"
+    # 供测试断言：被调用的次数 + 最近一次收到的请求体（验证注入/透传）
+    app.state.chat_calls = 0
+    app.state.last_chat_body = None
+    app.state.last_embeddings_body = None
 
     def _mode() -> str:
         return getattr(app.state, "mode", "ok")
@@ -42,6 +46,8 @@ def make_upstream_app() -> FastAPI:
             return {}  # unreachable
 
         body = await request.json()
+        app.state.chat_calls += 1
+        app.state.last_chat_body = body
         stream = bool(body.get("stream"))
 
         if mode == "http_500":
@@ -120,6 +126,7 @@ def make_upstream_app() -> FastAPI:
     @app.post("/v1/embeddings")
     async def embeddings(request: Request) -> dict:
         body = await request.json()
+        app.state.last_embeddings_body = body
         if _mode() == "http_500":
             from fastapi import HTTPException
 

@@ -10,6 +10,7 @@ resolve(alias) 在 snapshot() 之后调用，返回不可变描述符；解析�
 import asyncio
 import logging
 from dataclasses import dataclass
+from datetime import datetime
 from types import MappingProxyType
 from typing import Mapping
 
@@ -43,6 +44,7 @@ class AiModelDescriptor:
     provider_id: int
     input_price: float | None
     output_price: float | None
+    created_at: "datetime | None" = None
 
 
 @dataclass(frozen=True)
@@ -87,6 +89,12 @@ class AiRuntimeRegistry:
         if self._snapshot is None:
             return None
         return self._snapshot.descriptors.get(alias)
+
+    def descriptors(self) -> Mapping[str, AiModelDescriptor]:
+        """当前快照里所有对外 alias → 描述符（未构建快照时为空）。"""
+        if self._snapshot is None:
+            return MappingProxyType({})
+        return self._snapshot.descriptors
 
     async def _rebuild(self, revision: int) -> AiRegistrySnapshot:
         from app.db.session import session_scope
@@ -140,6 +148,7 @@ class AiRuntimeRegistry:
                     provider_id=m.provider_id,
                     input_price=_to_float(m.input_price),
                     output_price=_to_float(m.output_price),
+                    created_at=m.created_at,
                 )
 
         snapshot = AiRegistrySnapshot(

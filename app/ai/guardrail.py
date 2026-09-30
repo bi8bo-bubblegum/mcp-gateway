@@ -7,13 +7,16 @@
 匹配语义：大小写不敏感子串；按规则 scope 过滤（request/response/both）；
 both 在两侧都生效；仅启用的规则参与匹配。
 """
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Sequence
+
+from sqlalchemy import select
 
 from app.db.models import (
     GUARDRAIL_SCOPE_BOTH,
     GuardrailRule,
 )
+from app.db.session import session_scope
 
 
 @dataclass(frozen=True)
@@ -43,3 +46,23 @@ class GuardrailEngine:
             if rule.pattern.lower() in lowered:
                 hits.append(GuardrailHit(rule_id=rule.id, rule_name=rule.name))
         return hits
+
+
+class GuardrailLoader:
+    """每请求从 DB 加载 enabled 规则并构建引擎（v1 取舍）。
+
+    护栏规则表极小（几十到几百条），且管理端改完会 bump_revision，但热路径上
+    直接按 enabled 查一次最省心、也避免把规则塞进 revision 快照增加其体积。
+    后续若规则量变大或需要零延迟，可并入 AiRuntimeRegistry 的快照一起重建。
+    """
+
+    async def load(self) -> GuardrailEngine:
+        async with session_scope() as session:
+            rows = list(
+                (
+                    await session.execute(
+                        select(GuardrailRule).where(GuardrailRule.enabled.is_(True))
+                    )
+                ).scalars()
+            )
+        return GuardrailEngine(rows)

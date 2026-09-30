@@ -9,6 +9,8 @@ from cryptography.fernet import Fernet, InvalidToken
 
 TOKEN_PREFIX = "gw_"
 TOKEN_DISPLAY_LENGTH = 12
+# 对外分发的 AI Key 前缀：与 MCP 令牌区分开，客户端 base_url + ai_xxx 接入
+AI_KEY_PREFIX = "ai_"
 _HMAC_PURPOSE = b"gateway-token"
 _FERNET_PURPOSE = b"gateway-secret-box"
 
@@ -16,6 +18,11 @@ _FERNET_PURPOSE = b"gateway-secret-box"
 def generate_opaque_token() -> str:
     """Create a high-entropy bearer token shown to the admin exactly once."""
     return TOKEN_PREFIX + secrets.token_urlsafe(32)
+
+
+def generate_ai_key() -> str:
+    """生成对外分发的 AI Key，明文只在创建时返回一次（库里只存 HMAC 哈希）。"""
+    return AI_KEY_PREFIX + secrets.token_urlsafe(32)
 
 
 def token_display_prefix(token: str) -> str:

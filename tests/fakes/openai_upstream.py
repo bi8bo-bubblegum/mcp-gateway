@@ -17,8 +17,6 @@ _PROMPT_TOKENS = 5
 _COMPLETION_TOKENS = 7
 _TOTAL_TOKENS = _PROMPT_TOKENS + _COMPLETION_TOKENS
 
-_SSE_FIELDS = 'data: {"id":"chatcmpl-1","object":"chat.completion.chunk"'
-
 
 def _sse_line(payload: dict) -> str:
     import json
